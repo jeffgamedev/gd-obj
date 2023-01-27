@@ -9,20 +9,22 @@ const debug:=false
 # https://github.com/Ezcha/gd-obj
 # MIT License
 # https://github.com/Ezcha/gd-obj/blob/master/LICENSE
+# From:
+# https://github.com/jeffgamedev/gd-obj/blob/godot-4/obj-parse/ObjParse.gd
 
 # Returns an array of materials from a MTL file
 
 #public
 
 #Create mesh from obj and mtl paths
-static func load_obj(obj_path:String, mtl_path:String="")->Mesh:
+static func load_obj(obj_path:String, mtl_path:String="", allow_no_materials:bool=false)->Mesh:
 	if mtl_path=="":
 		mtl_path=search_mtl_path(obj_path)
 	var obj := get_data(obj_path)
 	var mats := {}
 	if mtl_path!="":
 		mats=_create_mtl(get_data(mtl_path),get_mtl_tex(mtl_path))
-	return _create_obj(obj,mats) if not obj.is_empty() and not mats.is_empty() else null
+	return _create_obj(obj,mats) if not obj.is_empty() and (not mats.is_empty() or allow_no_materials) else null
 
 #Create mesh from obj, materials. Materials should be {"matname":data}
 static func load_obj_from_buffer(obj_data:String,materials:Dictionary)->Mesh:
@@ -35,12 +37,11 @@ static func load_mtl_from_buffer(mtl_data:String,textures:Dictionary)->Dictionar
 #Get data from file path
 static func get_data(path:String) -> String:
 	if path!="":
-		var file := File.new()
-		var err:=file.open(path, File.READ)
-		if err==OK:
-			var res:=file.get_as_text()
-			file.close()
+		var res = FileAccess.get_file_as_string(path)
+		if (res):
 			return res
+		else:
+			print("error getting " + path)
 	return ""
 
 #Get textures from mtl path (return {"tex_path":data})
@@ -53,12 +54,11 @@ static func get_mtl_tex(mtl_path:String)->Dictionary:
 
 #Get textures paths from mtl path
 static func get_mtl_tex_paths(mtl_path:String)->Array:
-	var file := File.new()
-	var err:=file.open(mtl_path, File.READ)
+	var file = FileAccess.open(mtl_path, FileAccess.READ)
 	var paths := []
-	if err==OK:
-		var lines := file.get_as_text().split("\n", false)
-		file.close()
+	if file:
+		var mtl_text = FileAccess.get_file_as_string(mtl_path)
+		var lines := mtl_text.split("\n", false)
 		for line in lines:
 			var parts = line.split(" ", false,1)
 			if parts[0] in ["map_Kd","map_Ks","map_Ka"]:
@@ -68,11 +68,11 @@ static func get_mtl_tex_paths(mtl_path:String)->Array:
 
 #try to find mtl path from obj path
 static func search_mtl_path(obj_path:String):
-	var mtl_path=obj_path.get_base_dir().plus_file(obj_path.get_file().rsplit(".",false,1)[0]+".mtl")
-	var dir:Directory=Directory.new()
-	if !dir.file_exists(mtl_path):
-		mtl_path=obj_path.get_base_dir().plus_file(obj_path.get_file()+".mtl")
-	if !dir.file_exists(mtl_path):
+	
+	var mtl_path=obj_path.get_base_dir().path_join(obj_path.get_file().rsplit(".",false,1)[0]+".mtl")
+	if !FileAccess.file_exists(mtl_path):
+		mtl_path=obj_path.get_base_dir().path_join(obj_path.get_file()+".mtl")
+	if !FileAccess.file_exists(mtl_path):
 		return ""
 	return mtl_path
 
@@ -122,7 +122,7 @@ static func _get_image(mtl_filepath:String, tex_filename:String)->Image:
 		print("    Debug: Mapping texture file " + tex_filename)
 	var texfilepath := tex_filename
 	if tex_filename.is_relative_path():
-		texfilepath = mtl_filepath.get_base_dir().plus_file(tex_filename)
+		texfilepath = mtl_filepath.get_base_dir().path_join(tex_filename)
 	var filetype := texfilepath.get_extension()
 	if debug:
 		print("    Debug: texture file path: " + texfilepath + " of type " + filetype)
